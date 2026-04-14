@@ -1030,9 +1030,8 @@ async function trackApiCall({ userId, username, feature, provider, model, rawRes
         <div class="form-field" style="margin-bottom:8px">
           <label class="form-label">Deploy As</label>
           <select class="form-select" id="deploy-path-select">
-            <option value="index.html">index.html (root → vikyaitool-droid.github.io/Naturaref/)</option>
-            <option value="portal.html">portal.html</option>
-            <option value="admin.html">admin.html</option>
+            <option value="index.html">index.html → vikyaitool-droid.github.io/Admin-App/</option>
+            <option value="portal.html">portal.html → vikyaitool-droid.github.io/Naturaref/</option>
           </select>
         </div>
         <!-- Branch -->
@@ -1066,11 +1065,11 @@ async function trackApiCall({ userId, username, feature, provider, model, rawRes
         </div>
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
           <span style="color:var(--gold);font-size:10px;font-weight:700;width:50px;flex-shrink:0">Admin</span>
-          <a href="https://vikyaitool-droid.github.io/Naturaref/admin.html" target="_blank" rel="noopener"
-            style="color:var(--sky);font-family:'JetBrains Mono',monospace;font-size:10px;word-break:break-all">vikyaitool-droid.github.io/Naturaref/admin.html</a>
+          <a href="https://vikyaitool-droid.github.io/Admin-App/admin.html" target="_blank" rel="noopener"
+            style="color:var(--sky);font-family:'JetBrains Mono',monospace;font-size:10px;word-break:break-all">vikyaitool-droid.github.io/Admin-App/admin.html</a>
         </div>
         <div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--bdr);display:flex;justify-content:flex-end">
-          <a href="https://github.com/vikyaitool-droid/Naturaref" target="_blank" rel="noopener"
+          <a href="https://github.com/vikyaitool-droid/Admin-App" target="_blank" rel="noopener"
             style="color:var(--mu);font-size:10px">GitHub Repo ↗</a>
         </div>
       </div>
@@ -2944,7 +2943,7 @@ var _ghUser         = null;
 var _deployToken    = null;
 var _deployTokenExp = 0;
 var GH_OWNER     = 'vikyaitool-droid';
-var GH_REPO      = 'Naturaref';
+var GH_REPO      = 'Admin-App';
 
 function loadDeployPage() {
   // Restore GitHub token
@@ -3087,9 +3086,11 @@ async function runDeploy() {
   btn.disabled = true; btn.textContent = '⏳ Pushing…';
   clearDeployLog();
 
-  var path   = document.getElementById('deploy-path-select').value || 'index.html';
+  var selectedPath = document.getElementById('deploy-path-select').value || 'index.html';
+  var repo   = (selectedPath === 'portal.html') ? 'Naturaref' : 'Admin-App';
+  var path   = (selectedPath === 'portal.html') ? 'index.html' : selectedPath;
   var branch = document.getElementById('deploy-branch').value.trim() || 'main';
-  var apiBase = 'https://api.github.com/repos/' + GH_OWNER + '/' + GH_REPO;
+  var apiBase = 'https://api.github.com/repos/' + GH_OWNER + '/' + repo;
   var headers = {
     'Authorization': 'token ' + _ghToken,
     'Accept':        'application/vnd.github.v3+json',
@@ -3144,7 +3145,7 @@ async function runDeploy() {
     deployLog('ok', 'Pushed! Commit: ' + (putData.commit && putData.commit.sha ? putData.commit.sha.slice(0,8) : '✓'));
 
     // 4. Success
-    var baseUrl = 'https://' + GH_OWNER + '.github.io/' + GH_REPO + '/';
+    var baseUrl = 'https://' + GH_OWNER + '.github.io/' + repo + '/';
     var liveUrl = path === 'index.html' ? baseUrl : baseUrl + path;
     var log = document.getElementById('deploy-log');
     var el = document.createElement('div');
@@ -3639,7 +3640,7 @@ async function guHashStr(str) {
 function quickDeployAdmin() {
   // Switch path selector to admin.html
   var sel = document.getElementById('deploy-path-select');
-  if (sel) sel.value = 'admin.html';
+  if (sel) sel.value = 'index.html';
   // Clear any previous file selection to force user to pick the admin file
   _deployFile = null;
   var icon  = document.getElementById('dfd-icon');
@@ -3647,7 +3648,7 @@ function quickDeployAdmin() {
   var sub   = document.getElementById('dfd-sub');
   if (icon)  icon.textContent  = '👑';
   if (label) label.textContent = 'Select NaturaRef_Admin_v*.html';
-  if (sub)   sub.textContent   = 'Will be pushed as admin.html → /Naturaref/admin.html';
+  if (sub)   sub.textContent   = 'Will be pushed as index.html → /Admin-App/ (root)';
   updateDeployBtn();
   deployLog('info', 'Quick-select: Admin deploy mode · pick the admin HTML file above');
   toast('Select the admin HTML file to continue', 'info');
@@ -3658,7 +3659,7 @@ function quickDeployAdmin() {
 
 function quickDeployPortal() {
   var sel = document.getElementById('deploy-path-select');
-  if (sel) sel.value = 'index.html';
+  if (sel) sel.value = 'portal.html';
   _deployFile = null;
   var icon  = document.getElementById('dfd-icon');
   var label = document.getElementById('dfd-label');
