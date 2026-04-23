@@ -35,6 +35,13 @@ html,body{height:100%;font-family:'Nunito',sans-serif;background:var(--bg);color
 .pin-key:active,.pin-key:hover{background:var(--surf3);border-color:var(--gold-dk);color:var(--gold)}
 .pin-key.del{color:var(--mu);font-size:14px}
 .pin-err{font-size:12px;color:var(--red);min-height:20px;margin-top:4px}
+/* ── BIOMETRIC ── */
+.bio-btn{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;padding:12px;border-radius:12px;border:1.5px solid var(--bdr2);background:var(--surf2);color:var(--tx);font-size:13px;font-weight:700;cursor:pointer;font-family:'Nunito',sans-serif;transition:all .2s}
+.bio-btn:hover{background:var(--surf3);border-color:var(--gold-dk);color:var(--gold)}
+.bio-btn:active{transform:scale(.97)}
+.bio-btn:disabled{opacity:.45;cursor:not-allowed}
+.bio-separator{display:flex;align-items:center;gap:10px;margin-bottom:14px;color:var(--lt);font-size:11px;font-weight:600}
+.bio-separator::before,.bio-separator::after{content:'';flex:1;height:1px;background:var(--bdr)}
 
 /* ── TOPBAR ── */
 .topbar{height:56px;background:var(--surf);border-bottom:1.5px solid var(--bdr);display:flex;align-items:center;gap:10px;padding:0 18px;position:fixed;top:0;left:0;right:0;z-index:200}
@@ -408,6 +415,15 @@ html,body{height:100%;font-family:'Nunito',sans-serif;background:var(--bg);color
       <button class="pin-key del" onclick="pinClear()">✕</button>
     </div>
     <div class="pin-err" id="pin-err"></div>
+    <!-- Biometric login -->
+    <div id="bio-sep" style="display:none;margin:16px 0 0">
+      <div class="bio-separator">or</div>
+      <button class="bio-btn" id="bio-btn" onclick="tryBiometric()">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 10a2 2 0 0 0-2 2c0 1.02-.1 2.51-.26 4"/><path d="M14 13.12c0 2.38 0 6.38-1 8.88"/><path d="M17.29 21.02c.12-2.58.14-5.35.02-7.01"/><path d="M2 12a10 10 0 0 1 18-6"/><path d="M2 17c.9 1.62 2.27 3 4 4"/><path d="M2 6.5A16 16 0 0 1 12 2c4 0 7.8 1.5 10.61 4"/><path d="M5 19.5C5.81 21 7 22 8 22"/><path d="M7 14c.35 2 1.04 3.85 2 5.5"/><path d="M7.39 7A10 10 0 0 1 22 12c0 .51-.02 1.01-.06 1.5"/></svg>
+        <span id="bio-btn-label">Use Biometric</span>
+      </button>
+    </div>
   </div>
 </div>
 
@@ -942,31 +958,6 @@ async function trackApiCall({ userId, username, feature, provider, model, rawRes
       <div id="deploy-live-ver" style="font-size:10px;color:var(--mu);text-align:right;flex-shrink:0"></div>
     </div>
 
-    <!-- Two-App GitHub Pages structure info -->
-    <div style="background:rgba(72,136,216,.07);border:1.5px solid rgba(72,136,216,.28);border-radius:12px;padding:14px 16px;margin-bottom:16px">
-      <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.1em;color:var(--sky);margin-bottom:10px">📦 GitHub Pages — Two-App Structure</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
-        <div style="background:var(--surf2);border:1.5px solid var(--bdr);border-radius:8px;padding:10px 12px">
-          <div style="font-size:10px;font-weight:800;color:var(--sage);margin-bottom:3px">🌿 NaturaRef Portal</div>
-          <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--sky);margin-bottom:4px">index.html</div>
-          <div style="font-size:10px;color:var(--mu)">Doctor-facing clinical app · public entry point</div>
-        </div>
-        <div style="background:var(--surf2);border:1.5px solid var(--bdr);border-radius:8px;padding:10px 12px">
-          <div style="font-size:10px;font-weight:800;color:var(--gold);margin-bottom:3px">👑 Admin Panel</div>
-          <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--sky);margin-bottom:4px">admin.html</div>
-          <div style="font-size:10px;color:var(--mu)">This file · PIN-gated · deploy separately</div>
-        </div>
-      </div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <button class="btn btn-gold btn-sm" onclick="quickDeployAdmin()" style="flex:1;justify-content:center">
-          👑 Quick-select Admin Deploy
-        </button>
-        <button class="btn btn-sage btn-sm" onclick="quickDeployPortal()" style="flex:1;justify-content:center">
-          🌿 Quick-select Portal Deploy
-        </button>
-      </div>
-    </div>
-
     <div id="dpanel-api">
 
       <!-- Step 1: GitHub Token -->
@@ -1026,14 +1017,24 @@ async function trackApiCall({ userId, username, feature, provider, model, rawRes
           <div class="dfd-label" id="dfd-label">Tap to select HTML file</div>
           <div class="dfd-sub" id="dfd-sub">Portal or Admin · any .html</div>
         </div>
-        <!-- Repo path selector -->
+        <!-- Deploy target selector -->
         <div class="form-field" style="margin-bottom:8px">
-          <label class="form-label">Deploy As</label>
-          <select class="form-select" id="deploy-path-select">
-            <option value="index.html">index.html (root → vikyaitool-droid.github.io/Admin-App/)</option>
-            <option value="portal.html">portal.html</option>
-            <option value="admin.html">admin.html</option>
-          </select>
+          <label class="form-label">Deploy Target — tap to select</label>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+            <div id="dt-portal" onclick="selectDeployTarget('portal')"
+              style="cursor:pointer;border:2px solid var(--bdr);border-radius:10px;padding:12px 10px;background:var(--surf2);transition:all .2s;user-select:none">
+              <div style="font-size:22px;margin-bottom:5px">🌿</div>
+              <div style="font-size:12px;font-weight:800;color:var(--sage)">NaturaRef Portal</div>
+              <div style="font-size:10px;color:var(--mu);margin-top:3px;font-family:'JetBrains Mono',monospace">Naturaref / index.html</div>
+            </div>
+            <div id="dt-admin" onclick="selectDeployTarget('admin')"
+              style="cursor:pointer;border:2px solid var(--bdr);border-radius:10px;padding:12px 10px;background:var(--surf2);transition:all .2s;user-select:none">
+              <div style="font-size:22px;margin-bottom:5px">👑</div>
+              <div style="font-size:12px;font-weight:800;color:var(--gold)">Admin Panel</div>
+              <div style="font-size:10px;color:var(--mu);margin-top:3px;font-family:'JetBrains Mono',monospace">Admin-App / admin.html</div>
+            </div>
+          </div>
+          <div id="dt-status" style="font-size:11px;color:var(--mu);margin-top:6px;min-height:16px;padding:0 2px"></div>
         </div>
         <!-- Branch -->
         <div class="form-field" style="margin-bottom:0">
@@ -1387,16 +1388,21 @@ function updatePinDots() {
     d.classList.toggle('filled', i < _pinBuffer.length);
   }
 }
+function unlockAdmin() {
+  document.getElementById('pin-gate').style.display = 'none';
+  document.getElementById('admin-ui').style.display = 'flex';
+  document.getElementById('sidebar').removeAttribute('style');
+  document.getElementById('sidebar').classList.add('sb-visible');
+  document.getElementById('main-area').style.display = 'block';
+  document.getElementById('bottom-nav').removeAttribute('style');
+  document.getElementById('bottom-nav').classList.add('bn-visible');
+  initAdmin();
+}
 function checkPin() {
   if (_pinBuffer === ADMIN_PIN) {
-    document.getElementById('pin-gate').style.display = 'none';
-    document.getElementById('admin-ui').style.display = 'flex';
-    document.getElementById('sidebar').removeAttribute('style');
-    document.getElementById('sidebar').classList.add('sb-visible');
-    document.getElementById('main-area').style.display = 'block';
-    document.getElementById('bottom-nav').removeAttribute('style');
-    document.getElementById('bottom-nav').classList.add('bn-visible');
-    initAdmin();
+    unlockAdmin();
+    // Offer biometric setup after PIN success if not already enrolled
+    setTimeout(offerBiometricSetup, 600);
   } else {
     document.getElementById('pin-err').textContent = 'Incorrect PIN. Try again.';
     _pinBuffer = '';
@@ -1413,6 +1419,101 @@ document.addEventListener('keydown', function(e) {
     else if (e.key === 'Backspace') pinDel();
   }
 });
+// ═══════════════════════════════════════════════════
+//  BIOMETRIC AUTH  (WebAuthn platform authenticator)
+// ═══════════════════════════════════════════════════
+var BIO_KEY = 'nr_bio_cred_id';
+
+async function bioAvailable() {
+  try {
+    return !!(window.PublicKeyCredential &&
+      await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable());
+  } catch(e) { return false; }
+}
+
+// Called on page load — show button only if credential already enrolled
+async function initBiometricButton() {
+  var enrolled = localStorage.getItem(BIO_KEY);
+  if (!enrolled) return;
+  if (!(await bioAvailable())) return;
+  var sep = document.getElementById('bio-sep');
+  if (sep) sep.style.display = 'block';
+}
+
+// Called after successful PIN — offer to enroll if not done yet
+async function offerBiometricSetup() {
+  if (localStorage.getItem(BIO_KEY)) return;  // already enrolled
+  if (!(await bioAvailable())) return;
+  var sep = document.getElementById('bio-sep');
+  var btn = document.getElementById('bio-btn');
+  var lbl = document.getElementById('bio-btn-label');
+  if (!sep || !btn) return;
+  sep.style.display = 'block';
+  if (lbl) lbl.textContent = 'Enable Biometric Login';
+  btn.style.borderColor = 'var(--gold-dk)'; btn.style.color = 'var(--gold)';
+  btn.onclick = registerBiometric;
+  toast('Tap to enable biometric login for next time', 'info');
+}
+
+async function registerBiometric() {
+  var btn = document.getElementById('bio-btn');
+  var lbl = document.getElementById('bio-btn-label');
+  if (btn) { btn.disabled = true; if (lbl) lbl.textContent = 'Setting up…'; }
+  try {
+    var challenge  = crypto.getRandomValues(new Uint8Array(32));
+    var userId     = crypto.getRandomValues(new Uint8Array(16));
+    var credential = await navigator.credentials.create({ publicKey: {
+      challenge:   challenge,
+      rp:          { name: 'NaturaRef Admin' },
+      user:        { id: userId, name: 'dr.vikranth@naturaref.com', displayName: 'Dr. Vikranth Admin' },
+      pubKeyCredParams: [{ alg: -7, type: 'public-key' }, { alg: -257, type: 'public-key' }],
+      authenticatorSelection: { authenticatorAttachment: 'platform', userVerification: 'required' },
+      timeout: 60000
+    }});
+    var b64 = btoa(String.fromCharCode.apply(null, new Uint8Array(credential.rawId)));
+    localStorage.setItem(BIO_KEY, b64);
+    if (lbl) lbl.textContent = 'Biometric Enabled ✓';
+    btn.style.borderColor = 'var(--sage-dk)'; btn.style.color = 'var(--sage)';
+    btn.onclick = null; btn.disabled = true;
+    toast('Biometric login enabled ✓', 'ok');
+  } catch(e) {
+    if (e.name !== 'NotAllowedError') toast('Biometric setup failed: ' + (e.message||e.name).slice(0,50), 'err');
+    var sep = document.getElementById('bio-sep');
+    if (sep) sep.style.display = 'none';
+  }
+  if (btn) btn.disabled = false;
+}
+
+async function tryBiometric() {
+  var btn = document.getElementById('bio-btn');
+  var lbl = document.getElementById('bio-btn-label');
+  var stored = localStorage.getItem(BIO_KEY);
+  if (!stored) return;
+  try {
+    if (btn) { btn.disabled = true; if (lbl) lbl.textContent = 'Verifying…'; }
+    var credIdBytes = Uint8Array.from(atob(stored), function(c){ return c.charCodeAt(0); });
+    var challenge   = crypto.getRandomValues(new Uint8Array(32));
+    var assertion   = await navigator.credentials.get({ publicKey: {
+      challenge:        challenge,
+      allowCredentials: [{ id: credIdBytes.buffer, type: 'public-key' }],
+      userVerification: 'required',
+      timeout:          60000
+    }});
+    if (assertion) {
+      unlockAdmin();
+    }
+  } catch(e) {
+    if (e.name !== 'NotAllowedError') {
+      document.getElementById('pin-err').textContent = 'Biometric failed — use PIN';
+    }
+    if (lbl) lbl.textContent = 'Use Biometric';
+  }
+  if (btn) btn.disabled = false;
+}
+
+// On load — show bio button if already enrolled
+initBiometricButton();
+
 // inject shake keyframe
 var _shakeStyle = document.createElement('style');
 _shakeStyle.textContent = '@keyframes shake{0%,100%{transform:translateX(0)}20%,60%{transform:translateX(-8px)}40%,80%{transform:translateX(8px)}}';
@@ -2943,8 +3044,33 @@ var _ghToken        = null;
 var _ghUser         = null;
 var _deployToken    = null;
 var _deployTokenExp = 0;
-var GH_OWNER     = 'vikyaitool-droid';
-var GH_REPO      = 'Admin-App';
+var GH_OWNER      = 'vikyaitool-droid';
+var GH_REPO       = 'Admin-App';   // updated dynamically by selectDeployTarget()
+var _deployTarget = null;          // 'portal' | 'admin'
+var _deployPath   = 'index.html';  // updated dynamically
+
+function selectDeployTarget(target) {
+  _deployTarget = target;
+  var portalCard = document.getElementById('dt-portal');
+  var adminCard  = document.getElementById('dt-admin');
+  var statusEl   = document.getElementById('dt-status');
+  if (portalCard) { portalCard.style.borderColor = 'var(--bdr)'; portalCard.style.background = 'var(--surf2)'; }
+  if (adminCard)  { adminCard.style.borderColor  = 'var(--bdr)'; adminCard.style.background  = 'var(--surf2)'; }
+  if (target === 'portal') {
+    GH_REPO     = 'Naturaref';
+    _deployPath = 'index.html';
+    if (portalCard) { portalCard.style.borderColor = 'var(--sage-dk)'; portalCard.style.background = 'var(--sage-pale)'; }
+    if (statusEl)   statusEl.innerHTML = '✅ <strong style="color:var(--sage)">NaturaRef Portal</strong> selected &nbsp;·&nbsp; pushes as <code style="font-size:10px;background:var(--surf3);padding:1px 5px;border-radius:4px">index.html</code> into repo <code style="font-size:10px;background:var(--surf3);padding:1px 5px;border-radius:4px">Naturaref</code>';
+    deployLog('info', 'Target: NaturaRef Portal → repo:Naturaref / path:index.html');
+  } else {
+    GH_REPO     = 'Admin-App';
+    _deployPath = 'admin.html';
+    if (adminCard)  { adminCard.style.borderColor = 'var(--gold-dk)'; adminCard.style.background = 'var(--gold-pale)'; }
+    if (statusEl)   statusEl.innerHTML = '✅ <strong style="color:var(--gold)">Admin Panel</strong> selected &nbsp;·&nbsp; pushes as <code style="font-size:10px;background:var(--surf3);padding:1px 5px;border-radius:4px">admin.html</code> into repo <code style="font-size:10px;background:var(--surf3);padding:1px 5px;border-radius:4px">Admin-App</code>';
+    deployLog('info', 'Target: Admin Panel → repo:Admin-App / path:admin.html');
+  }
+  updateDeployBtn();
+}
 
 function loadDeployPage() {
   // Restore GitHub token
@@ -3059,7 +3185,7 @@ function processDeployFile(f) {
 }
 
 function updateDeployBtn() {
-  var ready = (_ghToken || _deployToken) && _deployFile;
+  var ready = (_ghToken || _deployToken) && _deployFile && _deployTarget;
   document.getElementById('deploy-btn').disabled = !ready;
   if (ready) {
     var log = document.getElementById('deploy-log');
@@ -3083,11 +3209,12 @@ function clearDeployLog() { document.getElementById('deploy-log').innerHTML = ''
 
 async function runDeploy() {
   if (!_ghToken || !_deployFile) return;
+  if (!_deployTarget) { toast('Select a deploy target first (Portal or Admin)', 'err'); return; }
   var btn = document.getElementById('deploy-btn');
   btn.disabled = true; btn.textContent = '⏳ Pushing…';
   clearDeployLog();
 
-  var path   = document.getElementById('deploy-path-select').value || 'index.html';
+  var path   = _deployPath;
   var branch = document.getElementById('deploy-branch').value.trim() || 'main';
   var apiBase = 'https://api.github.com/repos/' + GH_OWNER + '/' + GH_REPO;
   var headers = {
@@ -3637,9 +3764,7 @@ async function guHashStr(str) {
 }
 
 function quickDeployAdmin() {
-  // Switch path selector to admin.html
-  var sel = document.getElementById('deploy-path-select');
-  if (sel) sel.value = 'admin.html';
+  selectDeployTarget('admin');
   // Clear any previous file selection to force user to pick the admin file
   _deployFile = null;
   var icon  = document.getElementById('dfd-icon');
@@ -3647,28 +3772,26 @@ function quickDeployAdmin() {
   var sub   = document.getElementById('dfd-sub');
   if (icon)  icon.textContent  = '👑';
   if (label) label.textContent = 'Select NaturaRef_Admin_v*.html';
-  if (sub)   sub.textContent   = 'Will be pushed as admin.html → /Admin-App/admin.html';
+  if (sub)   sub.textContent   = 'Will push as admin.html → Admin-App/admin.html';
   updateDeployBtn();
   deployLog('info', 'Quick-select: Admin deploy mode · pick the admin HTML file above');
-  toast('Select the admin HTML file to continue', 'info');
-  // Scroll file drop zone into view
+  toast('Now select your Admin HTML file', 'info');
   var dz = document.getElementById('deploy-drop-zone');
   if (dz) dz.scrollIntoView({ behavior:'smooth', block:'center' });
 }
 
 function quickDeployPortal() {
-  var sel = document.getElementById('deploy-path-select');
-  if (sel) sel.value = 'index.html';
+  selectDeployTarget('portal');
   _deployFile = null;
   var icon  = document.getElementById('dfd-icon');
   var label = document.getElementById('dfd-label');
   var sub   = document.getElementById('dfd-sub');
   if (icon)  icon.textContent  = '🌿';
   if (label) label.textContent = 'Select NaturaRef_v*.html (portal)';
-  if (sub)   sub.textContent   = 'Will be pushed as index.html → /Admin-App/ (root)';
+  if (sub)   sub.textContent   = 'Will push as index.html → Naturaref/index.html';
   updateDeployBtn();
   deployLog('info', 'Quick-select: Portal deploy mode · pick the portal HTML file above');
-  toast('Select the portal HTML file to continue', 'info');
+  toast('Now select your NaturaRef Portal HTML file', 'info');
   var dz = document.getElementById('deploy-drop-zone');
   if (dz) dz.scrollIntoView({ behavior:'smooth', block:'center' });
 }
