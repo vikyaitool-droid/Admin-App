@@ -4,12 +4,6 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>NaturaRef · Admin v15</title>
-<link rel="manifest" href="manifest.json">
-<meta name="theme-color" content="#0a0c12">
-<meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="NaturaRef">
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Lora:ital,wght@0,600;0,700;1,500&family=Nunito:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
@@ -3817,13 +3811,6 @@ function copyCode(id) {
 
 
 
-</script>
-<script>
-if('serviceWorker' in navigator){
-  navigator.serviceWorker.register('./sw.js')
-    .then(()=>console.log('[NaturaRef SW] Ready'))
-    .catch(e=>console.warn('[NaturaRef SW]',e));
-}
 </script>
 </body>
 </html>
