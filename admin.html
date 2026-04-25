@@ -5,6 +5,15 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>NaturaRef · Admin v15</title>
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Lora:ital,wght@0,600;0,700;1,500&family=Nunito:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0a0c12">
+<script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('sw.js').catch(() => {});
+    });
+  }
+</script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 :root{
@@ -442,6 +451,7 @@ html,body{height:100%;font-family:'Nunito',sans-serif;background:var(--bg);color
       <span id="conn-label">Connect Firebase</span>
     </div>
     <button class="tb-btn" onclick="refreshAll()">↻ Refresh</button>
+    <button class="tb-btn" id="pwa-install-btn" onclick="triggerPwaInstall()" style="display:none;border-color:var(--gold-dk);color:var(--gold)">⬇ Install</button>
   </div>
 </div>
 
@@ -3796,7 +3806,35 @@ function quickDeployPortal() {
   if (dz) dz.scrollIntoView({ behavior:'smooth', block:'center' });
 }
 
-// github-upload lazy-load handled directly in navTo above
+// ── PWA Install Prompt ───────────────────────────────────────
+var _pwaPrompt = null;
+
+window.addEventListener('beforeinstallprompt', function(e) {
+  e.preventDefault();
+  _pwaPrompt = e;
+  var btn = document.getElementById('pwa-install-btn');
+  if (btn) btn.style.display = 'flex';
+});
+
+window.addEventListener('appinstalled', function() {
+  _pwaPrompt = null;
+  var btn = document.getElementById('pwa-install-btn');
+  if (btn) btn.style.display = 'none';
+  toast('NaturaRef Admin installed ✓', 'ok');
+});
+
+async function triggerPwaInstall() {
+  if (!_pwaPrompt) { toast('Install prompt not available', 'info'); return; }
+  _pwaPrompt.prompt();
+  var result = await _pwaPrompt.userChoice;
+  if (result.outcome === 'accepted') {
+    _pwaPrompt = null;
+    var btn = document.getElementById('pwa-install-btn');
+    if (btn) btn.style.display = 'none';
+  }
+}
+
+
 
 async function mintJwt(email, privateKey) {
   var now  = Math.floor(Date.now()/1000);
