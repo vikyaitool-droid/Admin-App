@@ -1363,7 +1363,9 @@ var FIREBASE_CONFIG = {
   appId:             "1:388030166402:web:45fbc664d0f05410d18b9b"
 };
 var ADMIN_PIN = '2580';
+var SUB_PIN   = '1111';   // ← change this to your subordinate's PIN
 var NR        = 'naturaref';
+var _adminRole = 'super'; // 'super' or 'viewer'
 
 // ═══════════════════════════════════════════════════
 //  STATE
@@ -1406,13 +1408,49 @@ function unlockAdmin() {
   document.getElementById('main-area').style.display = 'block';
   document.getElementById('bottom-nav').removeAttribute('style');
   document.getElementById('bottom-nav').classList.add('bn-visible');
+
+  // ── Apply viewer restrictions ──────────────────────────
+  if (_adminRole === 'viewer') {
+    // Pages viewer is allowed to access
+    var VIEWER_PAGES = ['pending', 'members'];
+
+    // Hide all sidebar items except pending + members (and their section headers)
+    var sbSections = document.querySelectorAll('.sb-section');
+    sbSections.forEach(function(s){ s.style.display = 'none'; });
+    document.querySelectorAll('.sb-item').forEach(function(btn) {
+      var onclick = btn.getAttribute('onclick') || '';
+      var allowed = VIEWER_PAGES.some(function(p){ return onclick.indexOf("'" + p + "'") !== -1; });
+      btn.style.display = allowed ? '' : 'none';
+    });
+
+    // Hide all bottom-nav items except pending + members
+    document.querySelectorAll('.bn-item').forEach(function(btn) {
+      var onclick = btn.getAttribute('onclick') || '';
+      var allowed = VIEWER_PAGES.some(function(p){ return onclick.indexOf("'" + p + "'") !== -1; });
+      btn.style.display = allowed ? '' : 'none';
+    });
+
+    // Update sidebar footer
+    var foot = document.querySelector('.sb-foot');
+    if (foot) foot.innerHTML = '<strong style="color:var(--sky)">Viewer Access</strong>Members &amp; Approvals only';
+
+    // Start on pending page
+    setTimeout(function(){ navTo('pending'); }, 100);
+  }
+  // ───────────────────────────────────────────────────────
+
   initAdmin();
 }
 function checkPin() {
   if (_pinBuffer === ADMIN_PIN) {
+    _adminRole = 'super';
     unlockAdmin();
     // Offer biometric setup after PIN success if not already enrolled
     setTimeout(offerBiometricSetup, 600);
+  } else if (_pinBuffer === SUB_PIN) {
+    _adminRole = 'viewer';
+    unlockAdmin();
+    // No biometric offer for viewer role
   } else {
     document.getElementById('pin-err').textContent = 'Incorrect PIN. Try again.';
     _pinBuffer = '';
@@ -1593,6 +1631,10 @@ function closeDrawer() {
 //  NAVIGATION
 // ═══════════════════════════════════════════════════
 function navTo(page) {
+  // Viewer role guard — silently redirect to pending if page not allowed
+  if (_adminRole === 'viewer' && page !== 'pending' && page !== 'members') {
+    page = 'pending';
+  }
   _activeNav = page;
   document.querySelectorAll('.page').forEach(function(p){ p.classList.remove('active'); p.style.display = ''; });
   document.querySelectorAll('.sb-item').forEach(function(b){ b.classList.remove('active'); });
