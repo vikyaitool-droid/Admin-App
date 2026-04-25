@@ -7,7 +7,6 @@
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Lora:ital,wght@0,600;0,700;1,500&family=Nunito:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#0a0c12">
-<script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
 <script>
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
@@ -1298,7 +1297,7 @@ async function trackApiCall({ userId, username, feature, provider, model, rawRes
 <div class="modal-bg" id="pw-reset-modal" style="display:none">
   <div class="modal-box" style="max-width:500px">
     <div class="modal-title">🔑 Reset Password</div>
-    <div class="modal-sub">A temporary password will be generated and sent directly to the user. Admin will not see it.</div>
+    <div class="modal-sub">A Firebase password reset email will be sent directly to the doctor's registered email address.</div>
     <div id="pw-reset-user-info" style="background:var(--surf2);border:1.5px solid var(--bdr);border-radius:10px;padding:12px 14px;margin-bottom:16px;font-size:12.5px">
       <div style="font-weight:700;color:var(--tx);margin-bottom:4px" id="pw-reset-name">—</div>
       <div style="color:var(--mu)" id="pw-reset-username">—</div>
@@ -1308,30 +1307,11 @@ async function trackApiCall({ userId, username, feature, provider, model, rawRes
       </div>
     </div>
     <div id="pw-reset-email-status" style="font-size:11.5px;padding:8px 12px;border-radius:8px;margin-bottom:14px;display:none"></div>
-    <div style="margin-bottom:14px">
-      <label class="form-label">Delivery Method</label>
-      <div style="display:flex;flex-direction:column;gap:6px">
-        <label style="display:flex;align-items:flex-start;gap:9px;padding:10px 12px;background:var(--surf2);border:1.5px solid var(--bdr);border-radius:8px;cursor:pointer">
-          <input type="radio" name="pw-reset-method" value="email" id="pw-method-email" checked style="margin-top:2px;accent-color:var(--sky)">
-          <div>
-            <div style="font-size:12.5px;font-weight:700;color:var(--tx)">📧 Email via EmailJS &nbsp;<span id="pw-emailjs-badge" style="display:none;font-size:9px;font-weight:800;padding:1px 7px;border-radius:10px;background:rgba(74,173,122,.2);color:var(--sage);border:1px solid rgba(74,173,122,.3)">CONFIGURED</span><span id="pw-emailjs-missing" style="font-size:9px;font-weight:800;padding:1px 7px;border-radius:10px;background:rgba(224,88,88,.1);color:var(--red);border:1px solid rgba(224,88,88,.3)">NOT SET UP</span></div>
-            <div style="font-size:11px;color:var(--mu);margin-top:2px">Temp password sent directly to doctor's email. Admin never sees it.</div>
-          </div>
-        </label>
-        <label style="display:flex;align-items:flex-start;gap:9px;padding:10px 12px;background:var(--surf2);border:1.5px solid var(--bdr);border-radius:8px;cursor:pointer">
-          <input type="radio" name="pw-reset-method" value="inbox" id="pw-method-inbox" style="margin-top:2px;accent-color:var(--gold)">
-          <div>
-            <div style="font-size:12.5px;font-weight:700;color:var(--tx)">📥 In-App Inbox Message</div>
-            <div style="font-size:11px;color:var(--mu);margin-top:2px">Temp password delivered to user's NaturaRef inbox. Works without EmailJS.</div>
-          </div>
-        </label>
-      </div>
-    </div>
     <div class="modal-actions">
       <button class="btn btn-ghost" onclick="closeModal('pw-reset-modal')">Cancel</button>
-      <button class="btn btn-sky" onclick="confirmResetPassword()" id="pw-reset-confirm-btn" style="flex:1;justify-content:center">🔑 Reset &amp; Send</button>
+      <button class="btn btn-sky" onclick="confirmResetPassword()" id="pw-reset-confirm-btn" style="flex:1;justify-content:center">🔑 Send Reset Email</button>
     </div>
-    <div style="font-size:10.5px;color:var(--lt);margin-top:12px;line-height:1.6">User will be prompted to set a new password on next login. Admin does not see or store the temp password.</div>
+    <div style="font-size:10.5px;color:var(--lt);margin-top:12px;line-height:1.6">Firebase will send a secure reset link directly to the doctor. No temporary password is generated or stored.</div>
   </div>
 </div>
 
@@ -1411,6 +1391,7 @@ var NR        = 'naturaref';
 //  STATE
 // ═══════════════════════════════════════════════════
 var _db         = null;
+var _fbAuth     = null;
 var _connected  = false;
 var _users      = [];
 var _cardMap    = {};
@@ -1591,10 +1572,16 @@ async function connectFirebase() {
   try {
     if (!window.firebase) {
       await loadScript('https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js');
+    }
+    if (!firebase.firestore) {
       await loadScript('https://www.gstatic.com/firebasejs/8.10.0/firebase-firestore.js');
     }
+    if (!firebase.auth) {
+      await loadScript('https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js');
+    }
     if (!firebase.apps.length) firebase.initializeApp(FIREBASE_CONFIG);
-    _db = firebase.firestore();
+    if (!_db)     _db     = firebase.firestore();
+    if (!_fbAuth) _fbAuth = firebase.auth();
     _connected = true;
     pill.className = 'conn-pill connected';
     document.getElementById('conn-label').textContent = '🔥 Firebase';
@@ -1998,15 +1985,7 @@ async function loadUsers() {
     updateBadges();
     // Also refresh forgot badge if on that page
     if (_activeNav === 'forgot') loadForgotRequests();
-    else {
-      // Just update badge count without full reload
-      if (_db) {
-        _db.collection('naturaref_forgot_requests').where('status','==','pending').get().then(function(s){
-          var bEl = document.getElementById('badge-forgot');
-          if (bEl) { if(s.size>0){bEl.textContent=s.size;bEl.style.display='inline-block';}else bEl.style.display='none'; }
-        }).catch(function(){});
-      }
-    }
+    // badge-forgot hidden — forgot requests retired (Firebase Auth handles resets)
   } catch(e) { console.warn('loadUsers:', e); }
 }
 
@@ -2023,85 +2002,22 @@ function updateBadges() {
   }
 }
 
-// ── Forgot password requests ──
+
+// ── Forgot password requests — RETIRED ──
+// Password resets now go directly via Firebase Auth sendPasswordResetEmail.
+// The naturaref_forgot_requests collection is no longer written to by the portal.
+// These stubs prevent errors from any residual calls.
 var _forgotRequests = [];
-async function loadForgotRequests() {
-  var el       = document.getElementById('forgot-list');
-  var elInline = document.getElementById('forgot-list-inline');
-  var targets  = [el, elInline].filter(Boolean);
-  if (!_db) {
-    targets.forEach(function(t){ t.innerHTML='<div class="empty"><div class="empty-icon">🔌</div><div class="empty-msg">Connect to Firebase first</div></div>'; });
-    return;
-  }
-  targets.forEach(function(t){ t.innerHTML='<div class="loading-row"><span class="spinner"></span> Loading…</div>'; });
-  try {
-    var snap = await _db.collection('naturaref_forgot_requests').orderBy('requestedAt','desc').limit(50).get();
-    _forgotRequests = [];
-    snap.forEach(function(d){ _forgotRequests.push(Object.assign({_id:d.id}, d.data())); });
-
-    // Update badges
-    var openCount = _forgotRequests.filter(function(r){ return r.status==='pending'; }).length;
-    var bEl = document.getElementById('badge-forgot');
-    if (bEl) { if(openCount>0){ bEl.textContent=openCount; bEl.style.display='inline-block'; } else bEl.style.display='none'; }
-    var bInline = document.getElementById('badge-forgot-inline');
-    if (bInline) { if(openCount>0){ bInline.textContent=openCount; bInline.style.display='inline-block'; } else bInline.style.display='none'; }
-    // Also reflect in Pending bottom-nav badge (combined count)
-    var pendingCount = _users.filter(function(u){ return u.status==='pending'; }).length;
-    var combinedBadge = pendingCount + openCount;
-    var bnb = document.getElementById('bn-badge-pending');
-    if (bnb) { if(combinedBadge>0){ bnb.textContent=combinedBadge; bnb.style.display='inline-block'; } else bnb.style.display='none'; }
-
-    var html = _buildForgotHtml();
-
-    if (!_forgotRequests.length) {
-      targets.forEach(function(t){ t.innerHTML='<div class="empty"><div class="empty-icon">✅</div><div class="empty-msg">No password reset requests</div></div>'; });
-      return;
-    }
-    targets.forEach(function(t){ t.innerHTML = html; });
-  } catch(e) {
-    targets.forEach(function(t){ t.innerHTML='<div class="empty"><div class="empty-icon">⚠️</div><div class="empty-msg">Error: '+escHtml(e.message)+'</div></div>'; });
-  }
-}
-
-function _buildForgotHtml() {
-  if (!_forgotRequests.length) return '<div class="empty"><div class="empty-icon">✅</div><div class="empty-msg">No password reset requests</div></div>';
-  var html = '<div class="user-grid">';
-  _forgotRequests.forEach(function(r) {
-    var ts = r.requestedAt ? new Date(r.requestedAt).toLocaleString('en-IN') : '—';
-    var statusColor = r.status==='resolved' ? '#4aad7a' : '#e09030';
-    var statusLabel = r.status==='resolved' ? '✅ Resolved' : '⏳ Pending';
-    var matchedUser = null;
-    _users.forEach(function(u){
-      if(u.username===r.input.replace(/[^a-z0-9]/g,'') || u.email===r.input || (r.input&&r.input.replace(/@naturaref\.com$/,'')===u.username)) matchedUser=u;
-    });
-    html += '<div class="user-card" style="border-left:3px solid '+statusColor+'">'
-      +'<div class="uc-top">'
-      +'<div class="uc-avatar" style="background:'+statusColor+'22;color:'+statusColor+'">🔑</div>'
-      +'<div class="uc-info">'
-      +'<div class="uc-name">'+(r.resolvedName && r.resolvedName!==r.input ? escHtml(r.resolvedName) : 'Reset Request')
-        +' &nbsp;<span class="status-badge" style="background:rgba(224,144,48,.15);color:'+statusColor+';border:1px solid '+statusColor+'60">'+statusLabel+'</span></div>'
-      +'<div class="uc-qual">Input: <strong>' + escHtml(r.input||'—') + '</strong>'
-      +(matchedUser ? ' → <span style="color:#4aad7a;font-weight:700">@'+escHtml(matchedUser.username)+'</span>' : ' <span style="color:#e05858;font-size:10px">(user not found)</span>')+'</div>'
-      +'<div class="uc-meta"><span>📅 '+ts+'</span></div>'
-      +'</div></div>'
-      +'<div class="uc-actions">'
-      +(matchedUser && matchedUser.status==='active'
-        ? '<button class="btn btn-sky btn-sm" onclick="doResetPassword(\''+escJs(matchedUser._id)+'\',\''+escJs(matchedUser.name)+'\',\''+escJs(matchedUser.username)+'\',\''+escJs(r._id)+'\')">🔑 Reset Password</button>'
-        : '<span style="font-size:11px;color:var(--mu)">User not found — search in Members</span>')
-      +(r.status!=='resolved' ? '&nbsp;<button class="btn btn-ghost btn-sm" onclick="markForgotResolved(\''+escJs(r._id)+'\')">✓ Mark Resolved</button>' : '')
-      +'</div></div>';
+function loadForgotRequests() {
+  ['forgot-list','forgot-list-inline'].forEach(function(id){
+    var el = document.getElementById(id);
+    if (el) el.innerHTML = '<div class="empty"><div class="empty-icon">✅</div><div class="empty-msg">Password resets are now handled automatically via Firebase Auth email.</div></div>';
   });
-  html += '</div>';
-  return html;
+  ['badge-forgot','badge-forgot-inline'].forEach(function(id){ var el=document.getElementById(id); if(el) el.style.display='none'; });
 }
+function _buildForgotHtml() { return ''; }
+function markForgotResolved(id) {}
 
-async function markForgotResolved(id) {
-  if (!_db) return;
-  try {
-    await _db.collection('naturaref_forgot_requests').doc(id).update({ status:'resolved', resolvedAt: Date.now() });
-    loadForgotRequests();
-  } catch(e) { toast('Error: '+e.message,'err'); }
-}
 
 function updateDashboard() {
   var total   = _users.length;
@@ -2288,9 +2204,8 @@ var _resetUid      = '';
 var _resetName     = '';
 var _resetUsername = '';
 var _resetEmail    = '';
-var _resetForgotId = '';   // set when triggered from forgot-requests page
 
-function doResetPassword(uid, name, username, forgotId) {
+function doResetPassword(uid, name, username) {
   if (!_db) { toast('Not connected to Firebase', 'err'); return; }
   // Find user email from cached _users list
   var u = _users.find(function(x){ return x._id === uid; }) || {};
@@ -2298,21 +2213,12 @@ function doResetPassword(uid, name, username, forgotId) {
   _resetName     = name;
   _resetUsername = username;
   _resetEmail    = u.email || '';
-  _resetForgotId = forgotId || '';
 
   // Populate modal
   document.getElementById('pw-reset-name').textContent     = name;
   document.getElementById('pw-reset-username').textContent  = '@' + username;
   document.getElementById('pw-reset-email').textContent     = _resetEmail || '(no email on file)';
   document.getElementById('pw-reset-email-status').style.display = 'none';
-
-  // Show EmailJS config state
-  var ejsOk = _ejsServiceId && _ejsTemplateId && _ejsPublicKey;
-  document.getElementById('pw-emailjs-badge').style.display   = ejsOk ? 'inline' : 'none';
-  document.getElementById('pw-emailjs-missing').style.display = ejsOk ? 'none'   : 'inline';
-  // Pre-select best method
-  document.getElementById('pw-method-email').checked = ejsOk;
-  document.getElementById('pw-method-inbox').checked = !ejsOk;
 
   var btn = document.getElementById('pw-reset-confirm-btn');
   btn.disabled = false; btn.innerHTML = '🔑 Reset &amp; Send';
@@ -2321,114 +2227,56 @@ function doResetPassword(uid, name, username, forgotId) {
 }
 
 async function confirmResetPassword() {
-  if (!_db || !_resetUid) return;
+  if (!_db || !_resetUid || !_resetEmail) {
+    toast('No email on file for this user', 'err');
+    return;
+  }
   var btn = document.getElementById('pw-reset-confirm-btn');
-  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Processing…';
-
-  var method = document.querySelector('input[name="pw-reset-method"]:checked');
-  var deliveryMode = method ? method.value : 'inbox';
-
-  // Generate readable temp password: NR-XXXXXX
-  var chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-  var rand = '';
-  for (var i = 0; i < 6; i++) rand += chars.charAt(Math.floor(Math.random() * chars.length));
-  var tempPw = 'NR-' + rand;
+  var statusEl = document.getElementById('pw-reset-email-status');
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Sending…';
+  statusEl.style.display = 'none';
 
   try {
-    // Hash it exactly as the portal expects
-    var enc = new TextEncoder();
-    var buf = enc.encode(tempPw + 'naturaref_v1_salt');
-    var hashBuf = await crypto.subtle.digest('SHA-256', buf);
-    var hash = Array.from(new Uint8Array(hashBuf)).map(function(b){ return b.toString(16).padStart(2,'0'); }).join('');
+    if (!_fbAuth) { toast('Firebase Auth not initialised. Please reconnect.', 'err'); btn.disabled=false; btn.innerHTML='🔑 Send Reset Email'; return; }
 
-    // Write to Firestore
-    await _db.collection(NR + '_users').doc(_resetUid).update({
-      tempPasswordHash: hash,
-      mustChangePassword: true
-    });
+    // Firebase Auth sends the reset email directly — no temp password, no hash
+    await _fbAuth.sendPasswordResetEmail(_resetEmail);
+
     await writeAudit('password_reset', _resetUid);
 
-    // Mark forgot-request resolved if this came from that page
-    if (_resetForgotId) {
-      await _db.collection('naturaref_forgot_requests').doc(_resetForgotId).update({ status: 'resolved', resolvedAt: Date.now() });
-    }
+    statusEl.style.display = 'block';
+    statusEl.style.background = 'var(--sage-pale)';
+    statusEl.style.color = 'var(--sage)';
+    statusEl.style.border = '1px solid rgba(74,173,122,.3)';
+    statusEl.textContent = '✅ Reset email sent to ' + _resetEmail;
 
-    // Deliver the temp password
-    var deliveryOk = false;
-    if (deliveryMode === 'email') {
-      deliveryOk = await sendResetEmail(_resetEmail, _resetName, _resetUsername, tempPw);
-    }
-    if (!deliveryOk) {
-      // Fallback: in-app inbox
-      await _db.collection(NR + '_inbox').add({
-        to: _resetUid, from: 'admin', fromName: 'Dr. Vikranth',
-        subject: '🔑 Your Temporary Password — NaturaRef',
-        body: 'Hi ' + _resetName + ',\n\nYour password has been reset by the admin.\n\n'
-            + 'Your temporary password is: ' + tempPw + '\n\n'
-            + 'Please log in with this password. You will be prompted to set a new password immediately after logging in.\n\n'
-            + 'Do not share this password with anyone.',
-        read: false, ts: Date.now(), type: 'direct'
-      });
-      var statusEl = document.getElementById('pw-reset-email-status');
-      if (deliveryMode === 'email') {
-        statusEl.style.display = 'block';
-        statusEl.style.background = 'rgba(232,144,48,.12)';
-        statusEl.style.color = 'var(--amber)';
-        statusEl.style.border = '1px solid rgba(232,144,48,.3)';
-        statusEl.textContent = '⚠️ Email send failed — temp password delivered to in-app inbox instead.';
-      } else {
-        var statusEl2 = document.getElementById('pw-reset-email-status');
-        statusEl2.style.display = 'block';
-        statusEl2.style.background = 'var(--sage-pale)';
-        statusEl2.style.color = 'var(--sage)';
-        statusEl2.style.border = '1px solid rgba(74,173,122,.3)';
-        statusEl2.textContent = '✅ Temp password sent to @' + _resetUsername + '\'s in-app inbox.';
-      }
-    } else {
-      var statusEl3 = document.getElementById('pw-reset-email-status');
-      statusEl3.style.display = 'block';
-      statusEl3.style.background = 'var(--sage-pale)';
-      statusEl3.style.color = 'var(--sage)';
-      statusEl3.style.border = '1px solid rgba(74,173,122,.3)';
-      statusEl3.textContent = '✅ Email sent to ' + _resetEmail + ' — admin did not see the password.';
-    }
-
-    toast('Password reset for @' + _resetUsername, 'ok');
-    // Reload lists if needed
-    if (_resetForgotId) { loadForgotRequests(); }
+    toast('Reset email sent to @' + _resetUsername, 'ok');
     loadMembers();
 
   } catch(e) {
-    toast('Error: ' + e.message, 'err');
-    btn.disabled = false; btn.innerHTML = '🔑 Reset &amp; Send';
+    console.warn('[Admin] Password reset error:', e.code, e.message);
+    statusEl.style.display = 'block';
+    statusEl.style.background = 'rgba(224,88,88,.1)';
+    statusEl.style.color = 'var(--red)';
+    statusEl.style.border = '1px solid rgba(224,88,88,.3)';
+    if (e.code === 'auth/user-not-found') {
+      statusEl.textContent = '⚠️ No Firebase Auth account for this email. User may need to re-register.';
+    } else if (e.code === 'auth/invalid-email') {
+      statusEl.textContent = '⚠️ Invalid email address on file. Update in Members.';
+    } else if (e.code === 'auth/too-many-requests') {
+      statusEl.textContent = '⚠️ Too many reset attempts. Please wait before retrying.';
+    } else {
+      statusEl.textContent = '⚠️ Could not send reset email. Please try again.';
+    }
+    btn.disabled = false; btn.innerHTML = '🔑 Send Reset Email';
     return;
   }
 
-  btn.disabled = false; btn.innerHTML = '✓ Done';
+  btn.disabled = false; btn.innerHTML = '✓ Sent';
   setTimeout(function(){ closeModal('pw-reset-modal'); }, 1800);
 }
 
-async function sendResetEmail(toEmail, toName, username, tempPw) {
-  if (!toEmail) return false;
-  if (!_ejsServiceId || !_ejsTemplateId || !_ejsPublicKey) return false;
-  try {
-    if (!_ejsInitDone) {
-      emailjs.init({ publicKey: _ejsPublicKey });
-      _ejsInitDone = true;
-    }
-    await emailjs.send(_ejsServiceId, _ejsTemplateId, {
-      to_email:      toEmail,
-      to_name:       toName,
-      username:      username,
-      temp_password: tempPw,
-      login_url:     'https://ccr-drvikranth-66dea.web.app'
-    });
-    return true;
-  } catch(e) {
-    console.warn('EmailJS error:', e);
-    return false;
-  }
-}
+// sendResetEmail removed — password resets now use Firebase Auth directly.
 
 async function setStatus(uid, newStatus) {
   if (!_db) return;
