@@ -7,6 +7,7 @@
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Lora:ital,wght@0,600;0,700;1,500&family=Nunito:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#0a0c12">
+<script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
 <script>
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
@@ -1293,6 +1294,47 @@ async function trackApiCall({ userId, username, feature, provider, model, rawRes
   </div>
 </div>
 
+<!-- PASSWORD RESET MODAL -->
+<div class="modal-bg" id="pw-reset-modal" style="display:none">
+  <div class="modal-box" style="max-width:500px">
+    <div class="modal-title">🔑 Reset Password</div>
+    <div class="modal-sub">A temporary password will be generated and sent directly to the user. Admin will not see it.</div>
+    <div id="pw-reset-user-info" style="background:var(--surf2);border:1.5px solid var(--bdr);border-radius:10px;padding:12px 14px;margin-bottom:16px;font-size:12.5px">
+      <div style="font-weight:700;color:var(--tx);margin-bottom:4px" id="pw-reset-name">—</div>
+      <div style="color:var(--mu)" id="pw-reset-username">—</div>
+      <div style="margin-top:6px;display:flex;align-items:center;gap:6px">
+        <span style="font-size:11px;color:var(--mu)">📧</span>
+        <span id="pw-reset-email" style="font-size:12px;color:var(--sky)">—</span>
+      </div>
+    </div>
+    <div id="pw-reset-email-status" style="font-size:11.5px;padding:8px 12px;border-radius:8px;margin-bottom:14px;display:none"></div>
+    <div style="margin-bottom:14px">
+      <label class="form-label">Delivery Method</label>
+      <div style="display:flex;flex-direction:column;gap:6px">
+        <label style="display:flex;align-items:flex-start;gap:9px;padding:10px 12px;background:var(--surf2);border:1.5px solid var(--bdr);border-radius:8px;cursor:pointer">
+          <input type="radio" name="pw-reset-method" value="email" id="pw-method-email" checked style="margin-top:2px;accent-color:var(--sky)">
+          <div>
+            <div style="font-size:12.5px;font-weight:700;color:var(--tx)">📧 Email via EmailJS &nbsp;<span id="pw-emailjs-badge" style="display:none;font-size:9px;font-weight:800;padding:1px 7px;border-radius:10px;background:rgba(74,173,122,.2);color:var(--sage);border:1px solid rgba(74,173,122,.3)">CONFIGURED</span><span id="pw-emailjs-missing" style="font-size:9px;font-weight:800;padding:1px 7px;border-radius:10px;background:rgba(224,88,88,.1);color:var(--red);border:1px solid rgba(224,88,88,.3)">NOT SET UP</span></div>
+            <div style="font-size:11px;color:var(--mu);margin-top:2px">Temp password sent directly to doctor's email. Admin never sees it.</div>
+          </div>
+        </label>
+        <label style="display:flex;align-items:flex-start;gap:9px;padding:10px 12px;background:var(--surf2);border:1.5px solid var(--bdr);border-radius:8px;cursor:pointer">
+          <input type="radio" name="pw-reset-method" value="inbox" id="pw-method-inbox" style="margin-top:2px;accent-color:var(--gold)">
+          <div>
+            <div style="font-size:12.5px;font-weight:700;color:var(--tx)">📥 In-App Inbox Message</div>
+            <div style="font-size:11px;color:var(--mu);margin-top:2px">Temp password delivered to user's NaturaRef inbox. Works without EmailJS.</div>
+          </div>
+        </label>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal('pw-reset-modal')">Cancel</button>
+      <button class="btn btn-sky" onclick="confirmResetPassword()" id="pw-reset-confirm-btn" style="flex:1;justify-content:center">🔑 Reset &amp; Send</button>
+    </div>
+    <div style="font-size:10.5px;color:var(--lt);margin-top:12px;line-height:1.6">User will be prompted to set a new password on next login. Admin does not see or store the temp password.</div>
+  </div>
+</div>
+
 <!-- TOAST -->
 <div class="toast" id="toast"></div>
 
@@ -2044,7 +2086,7 @@ function _buildForgotHtml() {
       +'</div></div>'
       +'<div class="uc-actions">'
       +(matchedUser && matchedUser.status==='active'
-        ? '<button class="btn btn-sky btn-sm" onclick="doResetPassword(\''+escJs(matchedUser._id)+'\',\''+escJs(matchedUser.name)+'\',\''+escJs(matchedUser.username)+'\');markForgotResolved(\''+escJs(r._id)+'\')">🔑 Reset Password</button>'
+        ? '<button class="btn btn-sky btn-sm" onclick="doResetPassword(\''+escJs(matchedUser._id)+'\',\''+escJs(matchedUser.name)+'\',\''+escJs(matchedUser.username)+'\',\''+escJs(r._id)+'\')">🔑 Reset Password</button>'
         : '<span style="font-size:11px;color:var(--mu)">User not found — search in Members</span>')
       +(r.status!=='resolved' ? '&nbsp;<button class="btn btn-ghost btn-sm" onclick="markForgotResolved(\''+escJs(r._id)+'\')">✓ Mark Resolved</button>' : '')
       +'</div></div>';
@@ -2240,34 +2282,151 @@ async function doReject() {
 }
 
 // ═══════════════════════════════════════════════════
-//  RESET PASSWORD (admin generates temp password)
+//  RESET PASSWORD — modal-based, email-first flow
 // ═══════════════════════════════════════════════════
-async function doResetPassword(uid, name, username) {
-  if (!_db) { toast('Not connected to Firebase','err'); return; }
-  // Generate a readable temp password: NR-XXXXXX
+var _resetUid      = '';
+var _resetName     = '';
+var _resetUsername = '';
+var _resetEmail    = '';
+var _resetForgotId = '';   // set when triggered from forgot-requests page
+
+function doResetPassword(uid, name, username, forgotId) {
+  if (!_db) { toast('Not connected to Firebase', 'err'); return; }
+  // Find user email from cached _users list
+  var u = _users.find(function(x){ return x._id === uid; }) || {};
+  _resetUid      = uid;
+  _resetName     = name;
+  _resetUsername = username;
+  _resetEmail    = u.email || '';
+  _resetForgotId = forgotId || '';
+
+  // Populate modal
+  document.getElementById('pw-reset-name').textContent     = name;
+  document.getElementById('pw-reset-username').textContent  = '@' + username;
+  document.getElementById('pw-reset-email').textContent     = _resetEmail || '(no email on file)';
+  document.getElementById('pw-reset-email-status').style.display = 'none';
+
+  // Show EmailJS config state
+  var ejsOk = _ejsServiceId && _ejsTemplateId && _ejsPublicKey;
+  document.getElementById('pw-emailjs-badge').style.display   = ejsOk ? 'inline' : 'none';
+  document.getElementById('pw-emailjs-missing').style.display = ejsOk ? 'none'   : 'inline';
+  // Pre-select best method
+  document.getElementById('pw-method-email').checked = ejsOk;
+  document.getElementById('pw-method-inbox').checked = !ejsOk;
+
+  var btn = document.getElementById('pw-reset-confirm-btn');
+  btn.disabled = false; btn.innerHTML = '🔑 Reset &amp; Send';
+
+  document.getElementById('pw-reset-modal').style.display = 'flex';
+}
+
+async function confirmResetPassword() {
+  if (!_db || !_resetUid) return;
+  var btn = document.getElementById('pw-reset-confirm-btn');
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Processing…';
+
+  var method = document.querySelector('input[name="pw-reset-method"]:checked');
+  var deliveryMode = method ? method.value : 'inbox';
+
+  // Generate readable temp password: NR-XXXXXX
   var chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
   var rand = '';
-  for (var i=0; i<6; i++) rand += chars.charAt(Math.floor(Math.random()*chars.length));
+  for (var i = 0; i < 6; i++) rand += chars.charAt(Math.floor(Math.random() * chars.length));
   var tempPw = 'NR-' + rand;
 
   try {
-    // Hash it the same way the portal does
+    // Hash it exactly as the portal expects
     var enc = new TextEncoder();
-    var data = enc.encode(tempPw + 'naturaref_v1_salt');
-    var hashBuf = await crypto.subtle.digest('SHA-256', data);
+    var buf = enc.encode(tempPw + 'naturaref_v1_salt');
+    var hashBuf = await crypto.subtle.digest('SHA-256', buf);
     var hash = Array.from(new Uint8Array(hashBuf)).map(function(b){ return b.toString(16).padStart(2,'0'); }).join('');
 
-    await _db.collection(NR+'_users').doc(uid).update({
+    // Write to Firestore
+    await _db.collection(NR + '_users').doc(_resetUid).update({
       tempPasswordHash: hash,
       mustChangePassword: true
     });
-    await writeAudit('password_reset', uid);
+    await writeAudit('password_reset', _resetUid);
 
-    // Show the temp password to admin
-    alert('✅ Password reset for @' + username + ' (' + name + '):\n\n🔑 Temp password: ' + tempPw + '\n\nShare this with the user.\nWhen they log in with this password, they will be prompted to set their own new password immediately.');
-    toast('Password reset for @' + username, 'ok');
+    // Mark forgot-request resolved if this came from that page
+    if (_resetForgotId) {
+      await _db.collection('naturaref_forgot_requests').doc(_resetForgotId).update({ status: 'resolved', resolvedAt: Date.now() });
+    }
+
+    // Deliver the temp password
+    var deliveryOk = false;
+    if (deliveryMode === 'email') {
+      deliveryOk = await sendResetEmail(_resetEmail, _resetName, _resetUsername, tempPw);
+    }
+    if (!deliveryOk) {
+      // Fallback: in-app inbox
+      await _db.collection(NR + '_inbox').add({
+        to: _resetUid, from: 'admin', fromName: 'Dr. Vikranth',
+        subject: '🔑 Your Temporary Password — NaturaRef',
+        body: 'Hi ' + _resetName + ',\n\nYour password has been reset by the admin.\n\n'
+            + 'Your temporary password is: ' + tempPw + '\n\n'
+            + 'Please log in with this password. You will be prompted to set a new password immediately after logging in.\n\n'
+            + 'Do not share this password with anyone.',
+        read: false, ts: Date.now(), type: 'direct'
+      });
+      var statusEl = document.getElementById('pw-reset-email-status');
+      if (deliveryMode === 'email') {
+        statusEl.style.display = 'block';
+        statusEl.style.background = 'rgba(232,144,48,.12)';
+        statusEl.style.color = 'var(--amber)';
+        statusEl.style.border = '1px solid rgba(232,144,48,.3)';
+        statusEl.textContent = '⚠️ Email send failed — temp password delivered to in-app inbox instead.';
+      } else {
+        var statusEl2 = document.getElementById('pw-reset-email-status');
+        statusEl2.style.display = 'block';
+        statusEl2.style.background = 'var(--sage-pale)';
+        statusEl2.style.color = 'var(--sage)';
+        statusEl2.style.border = '1px solid rgba(74,173,122,.3)';
+        statusEl2.textContent = '✅ Temp password sent to @' + _resetUsername + '\'s in-app inbox.';
+      }
+    } else {
+      var statusEl3 = document.getElementById('pw-reset-email-status');
+      statusEl3.style.display = 'block';
+      statusEl3.style.background = 'var(--sage-pale)';
+      statusEl3.style.color = 'var(--sage)';
+      statusEl3.style.border = '1px solid rgba(74,173,122,.3)';
+      statusEl3.textContent = '✅ Email sent to ' + _resetEmail + ' — admin did not see the password.';
+    }
+
+    toast('Password reset for @' + _resetUsername, 'ok');
+    // Reload lists if needed
+    if (_resetForgotId) { loadForgotRequests(); }
+    loadMembers();
+
   } catch(e) {
-    toast('Error: '+e.message, 'err');
+    toast('Error: ' + e.message, 'err');
+    btn.disabled = false; btn.innerHTML = '🔑 Reset &amp; Send';
+    return;
+  }
+
+  btn.disabled = false; btn.innerHTML = '✓ Done';
+  setTimeout(function(){ closeModal('pw-reset-modal'); }, 1800);
+}
+
+async function sendResetEmail(toEmail, toName, username, tempPw) {
+  if (!toEmail) return false;
+  if (!_ejsServiceId || !_ejsTemplateId || !_ejsPublicKey) return false;
+  try {
+    if (!_ejsInitDone) {
+      emailjs.init({ publicKey: _ejsPublicKey });
+      _ejsInitDone = true;
+    }
+    await emailjs.send(_ejsServiceId, _ejsTemplateId, {
+      to_email:      toEmail,
+      to_name:       toName,
+      username:      username,
+      temp_password: tempPw,
+      login_url:     'https://ccr-drvikranth-66dea.web.app'
+    });
+    return true;
+  } catch(e) {
+    console.warn('EmailJS error:', e);
+    return false;
   }
 }
 
@@ -2695,6 +2854,11 @@ async function forceLogout(uid, name) {
 //  APP SETTINGS — REMOTE CONFIG (Phase 1)
 // ═══════════════════════════════════════════════════
 var _settingsData = {};
+// EmailJS config (loaded from Firestore naturaref_settings/app_config)
+var _ejsServiceId  = '';
+var _ejsTemplateId = '';
+var _ejsPublicKey  = '';
+var _ejsInitDone   = false;
 
 async function loadSettings() {
   var el = document.getElementById('settings-body');
@@ -2706,6 +2870,11 @@ async function loadSettings() {
   try {
     var doc = await _db.collection('naturaref_settings').doc('app_config').get();
     _settingsData = doc.exists ? doc.data() : {};
+    // Apply EmailJS config to runtime vars
+    _ejsServiceId  = _settingsData.emailjs_service_id  || '';
+    _ejsTemplateId = _settingsData.emailjs_template_id || '';
+    _ejsPublicKey  = _settingsData.emailjs_public_key  || '';
+    _ejsInitDone   = false; // re-init on next use
     renderSettings();
   } catch(e) {
     el.innerHTML = '<div class="empty"><div class="empty-icon">⚠️</div><div class="empty-msg">Error: ' + escHtml(e.message) + '</div></div>';
@@ -2800,6 +2969,27 @@ function renderSettings() {
     + '<input class="form-input" id="set-app-version" value="' + escHtml(s.app_version || 'v11') + '" placeholder="v12" style="max-width:160px">'
     + '</div></div>';
 
+  // ── EmailJS Config ──
+  html += '<div class="settings-section">'
+    + '<div class="settings-section-title">📧 EmailJS — Password Reset Emails</div>'
+    + '<div style="font-size:12px;color:var(--mu);margin-bottom:12px;line-height:1.7">When a password is reset, the temp password is emailed directly to the doctor. '
+    + 'Sign up free at <a href="https://www.emailjs.com" target="_blank" rel="noopener" style="color:var(--sky)">emailjs.com</a> (200 emails/month). '
+    + 'Create a service, then an email template with variables: <code style="background:var(--surf3);padding:1px 5px;border-radius:4px;font-size:10.5px">{{to_name}}</code>, '
+    + '<code style="background:var(--surf3);padding:1px 5px;border-radius:4px;font-size:10.5px">{{username}}</code>, '
+    + '<code style="background:var(--surf3);padding:1px 5px;border-radius:4px;font-size:10.5px">{{temp_password}}</code>, '
+    + '<code style="background:var(--surf3);padding:1px 5px;border-radius:4px;font-size:10.5px">{{login_url}}</code>.</div>'
+    + '<div style="display:grid;gap:10px">'
+    + '<div class="form-field" style="margin:0"><label class="form-label">EmailJS Public Key</label><input class="form-input" id="set-ejs-pubkey" placeholder="e.g. user_xxxxxxxxxxxxxxxxx" value="' + escHtml(s.emailjs_public_key || '') + '" autocomplete="off"></div>'
+    + '<div class="form-field" style="margin:0"><label class="form-label">Service ID</label><input class="form-input" id="set-ejs-service" placeholder="e.g. service_xxxxxxx" value="' + escHtml(s.emailjs_service_id || '') + '"></div>'
+    + '<div class="form-field" style="margin:0"><label class="form-label">Template ID</label><input class="form-input" id="set-ejs-template" placeholder="e.g. template_xxxxxxx" value="' + escHtml(s.emailjs_template_id || '') + '"></div>'
+    + '</div>'
+    + '<div style="margin-top:10px;font-size:11px;padding:8px 12px;border-radius:8px;'
+    + (s.emailjs_public_key && s.emailjs_service_id && s.emailjs_template_id
+        ? 'background:var(--sage-pale);color:var(--sage);border:1px solid rgba(74,173,122,.3)">✅ EmailJS is configured — password resets will be emailed automatically.'
+        : 'background:rgba(232,144,48,.1);color:var(--amber);border:1px solid rgba(232,144,48,.3)">⚠️ Not configured — password resets will fall back to in-app inbox delivery.')
+    + '</div>'
+    + '</div>';
+
   // ── Save button ──
   html += '<div style="display:flex;gap:10px;margin-top:8px;padding-top:20px;border-top:1.5px solid var(--bdr)">'
     + '<button class="btn btn-sage" onclick="saveSettings()" id="settings-save-btn" style="flex:1;justify-content:center;max-width:260px">💾 Save All Settings</button>'
@@ -2839,10 +3029,18 @@ async function saveSettings() {
       announcement:               document.getElementById('set-announcement').value.trim(),
       announcement_color:         document.getElementById('set-announcement-color').value,
       visible_sections:           hiddenSecs,
-      app_version:                document.getElementById('set-app-version').value.trim() || 'v11'
+      app_version:                document.getElementById('set-app-version').value.trim() || 'v11',
+      emailjs_public_key:         (document.getElementById('set-ejs-pubkey')  ||{}).value || '',
+      emailjs_service_id:         (document.getElementById('set-ejs-service') ||{}).value || '',
+      emailjs_template_id:        (document.getElementById('set-ejs-template')||{}).value || ''
     };
     await _db.collection('naturaref_settings').doc('app_config').set(cfg, { merge: true });
     _settingsData = Object.assign(_settingsData, cfg);
+    // Refresh runtime EmailJS vars
+    _ejsServiceId  = cfg.emailjs_service_id  || '';
+    _ejsTemplateId = cfg.emailjs_template_id || '';
+    _ejsPublicKey  = cfg.emailjs_public_key  || '';
+    _ejsInitDone   = false;
     await writeAudit('settings_updated', 'admin');
     toast('✅ Settings saved — live for all doctors now', 'ok');
   } catch(e) { toast('Error: ' + e.message, 'err'); }
